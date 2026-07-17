@@ -15,6 +15,7 @@ import json
 import requests
 import websocket
 import time
+import datetime
 import random
 import sys
 import os
@@ -25,6 +26,9 @@ import os
 
 CHROME_HOST = os.environ.get("CHROME_HOST", "localhost")
 CHROME_PORT = int(os.environ.get("CHROME_PORT", "9222"))
+
+# Cuma comment post <= N hari (hindari post basi yg jarang dibuka).
+MAX_AGE_DAYS = int(os.environ.get("MAX_AGE_DAYS", "60"))
 
 DRY_RUN = False  # << LIVE: beneran kirim komen
 
@@ -169,27 +173,57 @@ def scan_threads():
     for _ in range(4):
         cdp_eval("window.scrollBy(0, 1000)")
         time.sleep(2)
-    links = cdp_eval("""
+    raw = cdp_eval(r"""
         (() => {
-            const links = [];
+            const out = [];
+            const seen = new Set();
             document.querySelectorAll('a[href*="/post/"]').forEach(a => {
-                const rect = a.getBoundingClientRect();
-                if (rect.y > 50 && rect.y < 3000 && !a.href.includes('hidden_replies')) {
-                    links.push(a.href);
-                }
+                const m = a.href.match(/\/post\/([^/?#]+)/);
+                if (!m) return;
+                const pid = m[1];
+                if (seen.has(pid)) return;
+                seen.add(pid);
+                let ctx = a.closest('article');
+                if (!ctx) { let p = a.parentElement; for (let i = 0; i < 6 && p; i++) { if (p.querySelector('time')) { ctx = p; break; } p = p.parentElement; } }
+                if (!ctx) ctx = a.parentElement;
+                const times = Array.from(document.querySelectorAll('time')).filter(t => ctx && ctx.contains(t));
+                const dt = times.length ? times[0].getAttribute('datetime') : '';
+                out.push({ url: a.href.split('#')[0], dt });
             });
-            return JSON.stringify(links.slice(0, 20));
+            return JSON.stringify(out.slice(0, 30));
         })()
     """, 15)
-    link_list = json.loads(links) if links else []
-    # filter post yg sudah pernah di-comment (hindari spam post yg sama)
+    items = json.loads(raw) if raw else []
     posted = load_posted()
-    before = len(link_list)
-    link_list = [u for u in link_list if u not in posted]
-    if before != len(link_list):
-        print(f"    Skip {before - len(link_list)} post sudah pernah di-comment")
-    print(f"    Found {len(link_list)} posts")
-    return link_list
+    now = datetime.datetime.now(datetime.timezone.utc)
+    keep = []
+    skip_old = 0
+    skip_posted = 0
+    for it in items:
+        url = it.get("url", "")
+        if not url:
+            continue
+        if url in posted:
+            skip_posted += 1
+            continue
+        dt = it.get("dt", "")
+        age = None
+        if dt:
+            try:
+                d = datetime.datetime.fromisoformat(dt.replace("Z", "+00:00"))
+                age = (now - d).days
+            except Exception:
+                age = None
+        if age is not None and age > MAX_AGE_DAYS:
+            skip_old += 1
+            continue
+        keep.append(url)
+    if skip_old:
+        print(f"    Skip {skip_old} post > {MAX_AGE_DAYS} hari (basi)")
+    if skip_posted:
+        print(f"    Skip {skip_posted} post sudah pernah di-comment")
+    print(f"    Found {len(keep)} posts (<= {MAX_AGE_DAYS} hari)")
+    return keep
 
 
 def analyze_post(url):

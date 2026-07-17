@@ -9,6 +9,8 @@ Jalan di Windows maupun Linux/VPS (portable via environment variable).
 2. Bot scan search Threads (mode viral = tab "Top", atau newest = tab "Recent").
 3. Pilih post pertama yang cocok kategori, ketik komentar + link, kirim.
 4. Catat post ke `posted.txt` biar gak repeat di run berikutnya.
+5. Filter umur: cuma comment post ≤ `MAX_AGE_DAYS` hari (default 60 = 2 bulan).
+   Post lebih tua di-skip otomatis biar gak nyomentarin post basi yg jarang dibuka.
 
 ## Setup Windows (lokal)
 1. Install Python 3.11 + pip install -r requirements.txt
@@ -56,6 +58,7 @@ Jalan di Windows maupun Linux/VPS (portable via environment variable).
 | CHROME_BIN      | ...\Chrome\Application\chrome.exe              | google-chrome              |
 | CHROME_PROFILE  | ...\Chrome\Profile_Bot                         | ~/.threads-bot-profile     |
 | HEADLESS        | false                                          | false                      |
+| MAX_AGE_DAYS    | 60                                             | 60                         |
 
 Lihat `config.env.example`.
 
