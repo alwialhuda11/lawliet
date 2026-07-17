@@ -1,4 +1,4 @@
-import subprocess, time, sys, os, platform, requests
+import subprocess, time, sys, os, platform, requests, json, websocket
 
 IS_WIN = platform.system() == "Windows"
 
@@ -33,9 +33,46 @@ def chrome_up():
         return False
 
 
+def chrome_ws_ok():
+    """Cek koneksi WebSocket CDP beneran (HTTP 200 belum tentu WS jalan)."""
+    try:
+        r = requests.get(f"http://{CHROME_HOST}:{CHROME_PORT}/json", timeout=5)
+        pages = r.json()
+        if not pages:
+            return False
+        ws = websocket.create_connection(pages[0]["webSocketDebuggerUrl"], timeout=8)
+        ws.send(json.dumps({"id": 1, "method": "Runtime.evaluate",
+                            "params": {"expression": "1+1"}}))
+        ws.recv()
+        ws.close()
+        return True
+    except Exception:
+        return False
+
+
+def kill_debug_chrome():
+    """Kill hanya Chrome yg listen di port debugging (gak sentuh Chrome biasa)."""
+    try:
+        out = subprocess.run("netstat -ano | findstr :%s" % CHROME_PORT,
+                             shell=True, capture_output=True, text=True).stdout
+        pids = set()
+        for line in out.splitlines():
+            if "LISTENING" in line:
+                pids.add(line.split()[-1])
+        for pid in pids:
+            subprocess.run(f"taskkill /F /PID {pid} /T", shell=True,
+                           capture_output=True)
+    except Exception:
+        pass
+
+
 def ensure_chrome():
-    if chrome_up():
+    if chrome_up() and chrome_ws_ok():
         return
+    if chrome_up() and not chrome_ws_ok():
+        print("Chrome HTTP up tapi WS stale -> restart")
+        kill_debug_chrome()
+        time.sleep(2)
     args = [CHROME_BIN, f"--remote-debugging-port={CHROME_PORT}",
             f"--user-data-dir={PROFILE_DIR}", "--remote-allow-origins=*",
             "--no-first-run", "--no-default-browser-check"]
@@ -44,7 +81,7 @@ def ensure_chrome():
     subprocess.Popen(args)
     for _ in range(25):
         time.sleep(1)
-        if chrome_up():
+        if chrome_up() and chrome_ws_ok():
             return
 
 
@@ -53,9 +90,12 @@ if __name__ == "__main__":
         print("LOCK ada, skip (run sebelumnya msh jalan)")
         sys.exit(0)
     open(LOCK, "w").close()
+    log_path = os.path.join(HERE, "bot.log")
     try:
         ensure_chrome()
-        subprocess.run([PY, "-u", BOT], cwd=HERE)
+        with open(log_path, "a", encoding="utf-8") as log:
+            log.write("\n===== RUN %s =====\n" % time.strftime("%Y-%m-%d %H:%M:%S"))
+            subprocess.run([PY, "-u", BOT], cwd=HERE, stdout=log, stderr=subprocess.STDOUT)
     finally:
         try:
             os.remove(LOCK)

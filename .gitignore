@@ -4,6 +4,8 @@ __pycache__/
 run.lock
 posted.txt
 last_comment.txt
+bot.log
+*.log
 .env
 diag*.py
 check_post.py

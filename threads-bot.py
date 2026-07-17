@@ -74,14 +74,11 @@ KEYWORDS = {
 # ==========================================
 
 def get_ws_url():
-    """Get WebSocket URL — prefer tab posting (/post/), lalu threads.net, lalu pertama."""
+    """Get WebSocket URL — prefer threads.net tab, lalu pertama (hindari /post/ yg bisa ke-stuck)."""
     resp = requests.get(f"http://{CHROME_HOST}:{CHROME_PORT}/json", timeout=10)
     pages = resp.json()
     if not pages:
         raise Exception("Chrome tidak berjalan di port %s! Buka dengan remote debugging." % CHROME_PORT)
-    for p in pages:
-        if "/post/" in p.get("url", ""):
-            return p["webSocketDebuggerUrl"]
     for p in pages:
         if "threads.net" in p.get("url", ""):
             return p["webSocketDebuggerUrl"]
@@ -89,22 +86,37 @@ def get_ws_url():
 
 
 def cdp_eval(expr, timeout=30):
-    ws = websocket.create_connection(get_ws_url(), timeout=timeout)
-    ws.send(json.dumps({
-        "id": 1,
-        "method": "Runtime.evaluate",
-        "params": {"expression": expr, "returnByValue": True, "awaitPromise": True}
-    }))
-    msg = json.loads(ws.recv())
-    ws.close()
-    return msg.get("result", {}).get("result", {}).get("value")
+    last = None
+    for _ in range(2):
+        try:
+            ws = websocket.create_connection(get_ws_url(), timeout=timeout)
+            ws.send(json.dumps({
+                "id": 1,
+                "method": "Runtime.evaluate",
+                "params": {"expression": expr, "returnByValue": True, "awaitPromise": True}
+            }))
+            msg = json.loads(ws.recv())
+            ws.close()
+            return msg.get("result", {}).get("result", {}).get("value")
+        except Exception as e:
+            last = e
+            time.sleep(1)
+    raise last
 
 
 def cdp_navigate(url, timeout=30):
-    ws = websocket.create_connection(get_ws_url(), timeout=timeout)
-    ws.send(json.dumps({"id": 1, "method": "Page.navigate", "params": {"url": url}}))
-    json.loads(ws.recv())
-    ws.close()
+    last = None
+    for _ in range(2):
+        try:
+            ws = websocket.create_connection(get_ws_url(), timeout=timeout)
+            ws.send(json.dumps({"id": 1, "method": "Page.navigate", "params": {"url": url}}))
+            json.loads(ws.recv())
+            ws.close()
+            return
+        except Exception as e:
+            last = e
+            time.sleep(1)
+    raise last
 
 
 def click_at(x, y):
@@ -156,22 +168,24 @@ FALLBACK_QUERIES = ["viral", "trending", "fyp", "rekomendasi", "produk viral"]
 LAST_QUERY = ""
 
 
-def collect_from_search(q, max_age):
+def collect_from_search(q, max_age, tab="top"):
     global LAST_QUERY
     LAST_QUERY = q
-    print(f"    query: {q}  (max age {max_age}d)")
+    print(f"    query: {q}  (tab={tab}, max age {max_age}d)")
     cdp_navigate("https://www.threads.net/search?q=" + requests.utils.quote(q))
     time.sleep(8)
-    # klik tab Top / Teratas (post viral/populer)
-    tab = cdp_eval("""(() => {
+    # klik tab: top (viral/populer) atau recent (terbaru)
+    wanted = ["recent", "terbaru"] if tab == "recent" else ["top", "teratas"]
+    tabclicked = cdp_eval("""(() => {
+        const wanted = """ + json.dumps(wanted) + """;
         const els = document.querySelectorAll('a, div[role="tab"], span, button');
         for (const e of els) {
             const tx = (e.textContent||'').trim().toLowerCase();
-            if (tx === 'top' || tx === 'teratas') { e.click(); return tx; }
+            if (wanted.includes(tx)) { e.click(); return tx; }
         }
         return 'no-tab';
     })()""", 10)
-    print(f"    tab: {tab}")
+    print(f"    tab: {tabclicked}")
     time.sleep(3)
     for _ in range(4):
         cdp_eval("window.scrollBy(0, 1000)")
@@ -228,18 +242,18 @@ def collect_from_search(q, max_age):
 
 def scan_threads():
     print("[1/5] Scanning Threads (search mode)...")
-    primary = collect_from_search(random.choice(SEARCH_QUERIES), MAX_AGE_DAYS)
-    print(f"    Relevan recent (<= {MAX_AGE_DAYS}d): {len(primary)}")
+    primary = collect_from_search(random.choice(SEARCH_QUERIES), MAX_AGE_DAYS, tab="top")
+    print(f"    Relevan recent Top (<= {MAX_AGE_DAYS}d): {len(primary)}")
     if len(primary) < MIN_RECENT:
-        print(f"    Relevan sedikit (<{MIN_RECENT}) -> fallback viral seminggu terakhir (any category)")
-        fb = collect_from_search(random.choice(FALLBACK_QUERIES), WEEK_DAYS)
+        print(f"    Relevan di Top sedikit (<{MIN_RECENT}) -> fallback tab Recent (beauty fresh, on-topic)")
+        fb = collect_from_search(random.choice(SEARCH_QUERIES), WEEK_DAYS, tab="recent")
         added = 0
         for u in fb:
             if u not in primary:
                 primary.append(u)
                 added += 1
         if added:
-            print(f"    +{added} post viral <= {WEEK_DAYS}d (fallback)")
+            print(f"    +{added} post Recent <= {WEEK_DAYS}d (fallback on-topic)")
     print(f"    Total kandidat: {len(primary)}")
     return primary
 
@@ -565,17 +579,7 @@ def run():
             print(f"  Content: {post_info['content'][:60]}...")
             break
     if not target_post:
-        print("  Tidak ada post relevan -> fallback: comment post viral seminggu terakhir (any category)")
-        for link in post_links:
-            print(f"  Checking(fallback): {link}")
-            post_info = analyze_post(link, force=True)
-            if post_info:
-                target_post = post_info
-                print(f"  Fallback Match: {post_info['category']}/{post_info.get('subcategory', '?')}")
-                print(f"  Content: {post_info['content'][:60]}...")
-                break
-    if not target_post:
-        print("\nNo matching post found")
+        print("\nTidak ada post relevan ditemukan -> skip (biar gak spam off-topic)")
         return
     print("\n[3/5] Getting affiliate link...")
     affiliate_link = get_affiliate_link(target_post['category'], target_post.get('subcategory'))
