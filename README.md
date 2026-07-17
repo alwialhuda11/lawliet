@@ -11,6 +11,8 @@ Jalan di Windows maupun Linux/VPS (portable via environment variable).
 4. Catat post ke `posted.txt` biar gak repeat di run berikutnya.
 5. Filter umur: cuma comment post ≤ `MAX_AGE_DAYS` hari (default 60 = 2 bulan).
    Post lebih tua di-skip otomatis biar gak nyomentarin post basi yg jarang dibuka.
+6. Fallback: kalau post relevan recent < `MIN_RECENT` (default 3), bot juga ambil
+   post viral sembarang kategori dalam `WEEK_DAYS` terakhir (default 7) biar tetap jalan.
 
 ## Setup Windows (lokal)
 1. Install Python 3.11 + pip install -r requirements.txt
@@ -59,6 +61,8 @@ Jalan di Windows maupun Linux/VPS (portable via environment variable).
 | CHROME_PROFILE  | ...\Chrome\Profile_Bot                         | ~/.threads-bot-profile     |
 | HEADLESS        | false                                          | false                      |
 | MAX_AGE_DAYS    | 60                                             | 60                         |
+| MIN_RECENT      | 3                                              | 3                          |
+| WEEK_DAYS       | 7                                              | 7                          |
 
 Lihat `config.env.example`.
 

@@ -29,6 +29,10 @@ CHROME_PORT = int(os.environ.get("CHROME_PORT", "9222"))
 
 # Cuma comment post <= N hari (hindari post basi yg jarang dibuka).
 MAX_AGE_DAYS = int(os.environ.get("MAX_AGE_DAYS", "60"))
+# Fallback: kalau post relevan recent < MIN_RECENT, ambil juga post viral
+# sembarang kategori dalam WEEK_DAYS terakhir biar bot tetap jalan.
+MIN_RECENT = int(os.environ.get("MIN_RECENT", "3"))
+WEEK_DAYS = int(os.environ.get("WEEK_DAYS", "7"))
 
 DRY_RUN = False  # << LIVE: beneran kirim komen
 
@@ -148,15 +152,14 @@ def final_link(affiliate_link):
 
 
 SEARCH_QUERIES = ["skincare", "jerawat", "bruntusan", "makeup", "parfum", "glowing", "rekomendasi skincare"]
+FALLBACK_QUERIES = ["viral", "trending", "fyp", "rekomendasi", "produk viral"]
 LAST_QUERY = ""
 
 
-def scan_threads():
+def collect_from_search(q, max_age):
     global LAST_QUERY
-    print("[1/5] Scanning Threads (search mode)...")
-    q = random.choice(SEARCH_QUERIES)
     LAST_QUERY = q
-    print(f"    query: {q}")
+    print(f"    query: {q}  (max age {max_age}d)")
     cdp_navigate("https://www.threads.net/search?q=" + requests.utils.quote(q))
     time.sleep(8)
     # klik tab Top / Teratas (post viral/populer)
@@ -198,13 +201,13 @@ def scan_threads():
     now = datetime.datetime.now(datetime.timezone.utc)
     keep = []
     skip_old = 0
-    skip_posted = 0
+    seen_urls = set()
     for it in items:
         url = it.get("url", "")
-        if not url:
+        if not url or url in seen_urls:
             continue
+        seen_urls.add(url)
         if url in posted:
-            skip_posted += 1
             continue
         dt = it.get("dt", "")
         age = None
@@ -214,19 +217,34 @@ def scan_threads():
                 age = (now - d).days
             except Exception:
                 age = None
-        if age is not None and age > MAX_AGE_DAYS:
+        if age is not None and age > max_age:
             skip_old += 1
             continue
         keep.append(url)
     if skip_old:
-        print(f"    Skip {skip_old} post > {MAX_AGE_DAYS} hari (basi)")
-    if skip_posted:
-        print(f"    Skip {skip_posted} post sudah pernah di-comment")
-    print(f"    Found {len(keep)} posts (<= {MAX_AGE_DAYS} hari)")
+        print(f"    Skip {skip_old} post > {max_age} hari (basi)")
     return keep
 
 
-def analyze_post(url):
+def scan_threads():
+    print("[1/5] Scanning Threads (search mode)...")
+    primary = collect_from_search(random.choice(SEARCH_QUERIES), MAX_AGE_DAYS)
+    print(f"    Relevan recent (<= {MAX_AGE_DAYS}d): {len(primary)}")
+    if len(primary) < MIN_RECENT:
+        print(f"    Relevan sedikit (<{MIN_RECENT}) -> fallback viral seminggu terakhir (any category)")
+        fb = collect_from_search(random.choice(FALLBACK_QUERIES), WEEK_DAYS)
+        added = 0
+        for u in fb:
+            if u not in primary:
+                primary.append(u)
+                added += 1
+        if added:
+            print(f"    +{added} post viral <= {WEEK_DAYS}d (fallback)")
+    print(f"    Total kandidat: {len(primary)}")
+    return primary
+
+
+def analyze_post(url, force=False):
     cdp_navigate(url)
     time.sleep(4)
     text = cdp_eval("document.body.innerText", 30)
@@ -295,7 +313,19 @@ def analyze_post(url):
         elif any(k in ql for k in KEYWORDS["parfum"]):
             detected_category = "parfum"; detected_subcategory = "unisex"
     if not detected_category:
-        return None
+        if force:
+            ql = (LAST_QUERY or "").lower()
+            if any(k in ql for k in KEYWORDS["skincare"]):
+                detected_category = "skincare"; detected_subcategory = "moisturizer"
+            elif any(k in ql for k in KEYWORDS["makeup"]):
+                detected_category = "makeup"; detected_subcategory = "liptint"
+            elif any(k in ql for k in KEYWORDS["parfum"]):
+                detected_category = "parfum"; detected_subcategory = "unisex"
+            else:
+                detected_category = random.choice(["skincare", "makeup", "parfum"])
+                detected_subcategory = "moisturizer"
+        else:
+            return None
     return {"url": url, "content": post_content, "category": detected_category, "subcategory": detected_subcategory}
 
 
@@ -528,14 +558,24 @@ def run():
     target_post = None
     for link in post_links:
         print(f"  Checking: {link}")
-        post_info = analyze_post(link)
+        post_info = analyze_post(link, force=False)
         if post_info:
             target_post = post_info
             print(f"  Match: {post_info['category']}/{post_info.get('subcategory', '?')}")
             print(f"  Content: {post_info['content'][:60]}...")
             break
     if not target_post:
-        print("\nNo matching skincare/makeup/parfum post found")
+        print("  Tidak ada post relevan -> fallback: comment post viral seminggu terakhir (any category)")
+        for link in post_links:
+            print(f"  Checking(fallback): {link}")
+            post_info = analyze_post(link, force=True)
+            if post_info:
+                target_post = post_info
+                print(f"  Fallback Match: {post_info['category']}/{post_info.get('subcategory', '?')}")
+                print(f"  Content: {post_info['content'][:60]}...")
+                break
+    if not target_post:
+        print("\nNo matching post found")
         return
     print("\n[3/5] Getting affiliate link...")
     affiliate_link = get_affiliate_link(target_post['category'], target_post.get('subcategory'))
