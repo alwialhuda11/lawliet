@@ -381,27 +381,45 @@ def get_affiliate_link(category, subcategory=None):
     return random.choice(all_links) if all_links else None
 
 
-OPENERS = ["bestie!", "sis!", "guys!", "hallo!", "bestiee!", "yuk simak!", "hallo bestie!"]
+OPENERS = [
+    "gw jg ngalamin yg sama sih, nyebelin bgt",
+    "relate banget sama cerita lu",
+    "ih iya sih, aku jg pernah kek gini",
+    "bener sih, apalagi kalo lg parah",
+    "same sis, aku jg ngerasain",
+    "wkwk iya bgt ini",
+    "ya ampun iya, gw jg ngalamin",
+    "sama bgt, dulu gw jg gt",
+]
 SKINCARE_BODIES = [
-    "produk ini emang best sih, hasilnya keliatan banget. harganya juga terjangkau bgt",
-    "worth it banget sih, kulit jadi lebih halus. cocok buat kantong pelajar",
-    "auto repurchase nih, hasilnya nyata dan harganya student friendly",
-    "real talk, ini ngebantu banget. murah tapi kualitas gak kalengan",
-    "udah coba sendiri, hasilnya keliatan. harganya ramah di kantong bgt",
+    "coba yg ini aja, dipake rutin pelan2 ngerasain bedanya",
+    "menurut gw sih mending cari yg gentle buat kulit sensitif",
+    "ini yg ngebantu gw, bisa dicek link di bawah",
+    "gw saranin yg ada kandungan calming-nya biar ngeringanin",
+    "coba produk ini, hasilnya pelan tapi keliatan kok",
+    "kalo mau yg aman coba yg ini, gw sih oke",
 ]
 MAKEUP_BODIES = [
-    "ini sih auto repurchase, worth it banget. coba deh bestie",
-    "bagus bgt hasilnya, harganya murah lagi. auto checkout sih ini",
-    "worth it sih, finish-nya rapi dan harganya pelajar banget",
-    "real rekomendasi, kualitas oke harganya gak bikin bokek",
+    "coba yg finishing-nya natural gini, awet pula",
+    "menurut gw sih mending yg gampang blend di kulit",
+    "ini yg gw pake tiap hari, oke banget di muka",
+    "coba yg ini, hasilnya rapi gak tebel",
+    "gw saranin yg tahan lama biar gak perlu retouch",
 ]
 PARFUM_BODIES = [
-    "wanginya tahan lama bgt, harganya juga ramah di kantong",
-    "suka banget sama wanginya, harganya murah lagi. auto checkout",
-    "worth it sih, wanginya awet dan harganya pelajar friendly",
-    "ini sih bikin pede, wanginya tahan lama harganya terjangkau",
+    "coba yg wanginya soft gini, tahan lama pula",
+    "menurut gw sih mending yg gak terlalu menyengat",
+    "ini yg bikin pede, wanginya awet",
+    "coba yg ini, harumnya pas di badan",
+    "gw saranin yg unisex biar gampang dipake",
 ]
-CLOSERS = ["", "✨", "🤍", "recommended bgt!", "wajib coba sih!", "jangan lewatkan!"]
+CLOSERS = [
+    "link di bawah ya 👇",
+    "ini linknya kalo mau coba",
+    "cek link aku kalo tertarik",
+    "semoga membantu! 🙏",
+    "",
+]
 
 def _bodies_for(category):
     c = (category or "skincare").lower()
