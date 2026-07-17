@@ -20,6 +20,15 @@ import random
 import sys
 import os
 
+# Pastikan output UTF-8. Saat bot dijalankan via subprocess (run_scheduled.py /
+# Task Scheduler), Python anak mewarisi encoding cp1252 Windows -> print konten
+# ber-Unicode (é, ó, emoji) crash 'charmap'. Paksa utf-8 + errors=replace.
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 # ==========================================
 # CONFIGURATION
 # ==========================================
