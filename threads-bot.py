@@ -147,9 +147,10 @@ def click_at(x, y):
 
 
 def insert_text(text):
+    sel = "document.querySelector('[role=\"dialog\"] [contenteditable=\"true\"]') || document.querySelector('[contenteditable=\"true\"]')"
     expr = (
         "(() => {"
-        "  const ce = document.querySelector('[role=\"dialog\"] [contenteditable=\"true\"]') || document.querySelector('[contenteditable=\"true\"]');"
+        "  const ce = " + sel + ";"
         "  if (!ce) return 'NO_EDITOR';"
         "  ce.focus();"
         "  const parts = " + json.dumps(text) + ".split('\\n');"
@@ -160,7 +161,22 @@ def insert_text(text):
         "  return 'OK';"
         "})()"
     )
-    return cdp_eval(expr, 15)
+    res = cdp_eval(expr, 15)
+    # verify text landed in the editor (execCommand bisa gagal silent)
+    check = cdp_eval("(() => { const ce = " + sel + "; return ce ? ce.innerText : 'NO_EDITOR'; })()", 10)
+    if check and text.strip()[:20].lower() in (check or '').lower():
+        return 'OK'
+    # fallback: clipboard paste
+    try:
+        cdp_eval("(navigator.clipboard.writeText(" + json.dumps(text) + "))", 10)
+        cdp_eval("(() => { const ce = " + sel + "; if (ce) { ce.focus(); document.execCommand('paste'); } })()", 10)
+        time.sleep(1)
+        check = cdp_eval("(() => { const ce = " + sel + "; return ce ? ce.innerText : 'NO_EDITOR'; })()", 10)
+        if check and text.strip()[:20].lower() in (check or '').lower():
+            return 'OK'
+    except Exception:
+        pass
+    return res
 
 
 # ==========================================
@@ -540,15 +556,24 @@ def post_comment(post_info, affiliate_link):
         print("    Kirim button not found:", clicked)
         return False
     print("    Kirim clicked (JS):", clicked)
-    time.sleep(5)
-    # sukses = modal tertutup (dialog count 0) ATAU username muncul di halaman
-    dlg = cdp_eval("""(()=>document.querySelectorAll('[role="dialog"]').length)()""", 10)
-    cdp_navigate(url)
     time.sleep(4)
-    verify_text = cdp_eval("document.body.innerText", 30)
-    if (dlg == 0) or (YOUR_USERNAME and YOUR_USERNAME.lower() in verify_text.lower()):
-        return True
-    return False
+    # STRICT verify: comment harus MUNCUL di post (bukan cuma modal tertutup)
+    found = False
+    for _ in range(6):
+        dlg = cdp_eval("""(()=>document.querySelectorAll('[role="dialog"]').length)()""", 10)
+        if dlg and int(dlg) > 0:
+            time.sleep(2)   # modal msh kebuka -> send blm beres
+            continue
+        cdp_navigate(url)
+        time.sleep(4)
+        vt = cdp_eval("document.body.innerText", 30) or ""
+        low = vt.lower()
+        if (YOUR_USERNAME and YOUR_USERNAME.lower() in low) or ("shopee" in low):
+            found = True
+            break
+        time.sleep(2)
+    print("    VERIFY comment on post:", found)
+    return found
 
 
 def generate_alert(post_info, affiliate_link, success):

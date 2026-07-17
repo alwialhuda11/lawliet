@@ -89,7 +89,12 @@ if __name__ == "__main__":
     if os.path.exists(LOCK):
         print("LOCK ada, skip (run sebelumnya msh jalan)")
         sys.exit(0)
-    open(LOCK, "w").close()
+    # atomic lock (CEgah race: 2 run barengan yg lolos pengecekan file)
+    try:
+        os.open(LOCK, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        print("LOCK ada (race), skip")
+        sys.exit(0)
     log_path = os.path.join(HERE, "bot.log")
     try:
         ensure_chrome()
