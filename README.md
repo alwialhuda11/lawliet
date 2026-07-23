@@ -1,77 +1,104 @@
-# Threads Affiliate Comment Bot
+# THREADS AFFILIATE BOT - DEPLOYMENT GUIDE
 
-Bot auto-komen Threads dengan link affiliate Shopee pada post yang relevan
-(skincare / makeup / parfum). Satu run = satu komentar di 1 post viral/relevan.
-Jalan di Windows maupun Linux/VPS (portable via environment variable).
+Bot otomatis comment Threads dengan affiliate link Shopee.
 
-## Cara kerja singkat
-1. Buka Chrome dengan remote-debugging aktif (port 9222).
-2. Bot scan search Threads (mode viral = tab "Top", atau newest = tab "Recent").
-3. Pilih post pertama yang cocok kategori, ketik komentar + link, kirim.
-4. Catat post ke `posted.txt` biar gak repeat di run berikutnya.
-5. Filter umur: cuma comment post ≤ `MAX_AGE_DAYS` hari (default 60 = 2 bulan).
-   Post lebih tua di-skip otomatis biar gak nyomentarin post basi yg jarang dibuka.
-6. Fallback: kalau post relevan recent < `MIN_RECENT` (default 3), bot juga ambil
-   post viral sembarang kategori dalam `WEEK_DAYS` terakhir (default 7) biar tetap jalan.
+## FITUR
+- Multi-account (4 akun sekaligus)
+- Headless mode (jalan di VPS tanpa GUI)
+- Auto-detect kategori post (skincare/makeup/parfum)
+- Comment Gen Z style + affiliate link
 
-## Setup Windows (lokal)
-1. Install Python 3.11 + pip install -r requirements.txt
-2. Jalankan Chrome debug (pakai profile terpisah, default "User Data" ditolak Chrome):
-   ```
-   "C:\Program Files\Google\Chrome\Application\chrome.exe" ^
-     --remote-debugging-port=9222 ^
-     --user-data-dir="C:\Users\ALWI ALHUDAHADIASA\AppData\Local\Google\Chrome\Profile_Bot" ^
-     --remote-allow-origins=* --no-first-run --no-default-browser-check
-   ```
-3. Login Threads sekali di profile itu, biarkan Chrome nyala.
-4. Tes dulu (DRY_RUN): set `DRY_RUN = True` di threads-bot.py, lalu:
-   ```
-   python threads-bot.py
-   ```
-5. Kalau OK, set `DRY_RUN = False`, lalu jalankan otomatis tiap 25 mnt:
-   - Klik kanan `install_task.bat` → Run as administrator (daftarkan Task Scheduler).
-   - Atau manual: `python run_scheduled.py` (ini juga otomatis nyalain Chrome kalau mati).
+## DEPLOYMENT KE VPS UBUNTU
 
-## Setup VPS / Linux (headless)
-1. Install Chromium: `sudo apt install chromium` (atau `google-chrome-stable`).
-2. `pip install -r requirements.txt`
-3. Siapkan profile yg SUDAH LOGIN Threads (paling gampang: copy folder
-   `Profile_Bot` dari Windows ke VPS, taruh di `~/.threads-bot-profile`).
-   Atau jalankan sekali tanpa headless + pakai Xvfb/display buat login.
-4. Jalankan (headless):
-   ```
-   export CHROME_BIN=google-chrome
-   export CHROME_PROFILE=$HOME/.threads-bot-profile
-   export HEADLESS=true
-   python run_scheduled.py
-   ```
-   run_scheduled.py akan nyalain Chrome headless (+--remote-debugging-port=9222)
-   dan menjalankan bot. Lock file mencegah overlap antar run.
-5. Biar jalan terus: pakai cron / systemd / screen. Contoh cron tiap 25 mnt:
-   ```
-   */25 * * * * cd /path/threads-affiliate-bot && /usr/bin/python3 run_scheduled.py >> bot.log 2>&1
-   ```
+### Step 1: Upload ke GitHub (di Windows)
+```bash
+cd threads-affiliate-bot
+git init
+git add .
+git commit -m "Initial commit"
+git remote add origin https://github.com/USERNAME/threads-affiliate-bot.git
+git push -u origin master
+```
 
-## Konfigurasi (environment variable, opsional)
-| Var             | Default (Win)                                  | Default (Linux)            |
-|-----------------|------------------------------------------------|----------------------------|
-| CHROME_HOST     | localhost                                      | localhost                  |
-| CHROME_PORT     | 9222                                           | 9222                       |
-| CHROME_BIN      | ...\Chrome\Application\chrome.exe              | google-chrome              |
-| CHROME_PROFILE  | ...\Chrome\Profile_Bot                         | ~/.threads-bot-profile     |
-| HEADLESS        | false                                          | false                      |
-| MAX_AGE_DAYS    | 60                                             | 60                         |
-| MIN_RECENT      | 3                                              | 3                          |
-| WEEK_DAYS       | 7                                              | 7                          |
+### Step 2: Clone di VPS
+```bash
+ssh root@VPS_IP
+cd ~
+git clone https://github.com/USERNAME/threads-affiliate-bot.git
+cd threads-affiliate-bot
+```
 
-Lihat `config.env.example`.
+### Step 3: Auto Setup
+```bash
+bash setup-vps.sh
+```
 
-## File penting
-- `threads-bot.py`    → inti bot (edit YOUR_USERNAME & AFFILIATE_DB di dalamnya).
-- `run_scheduled.py`  → runner: pastikan Chrome nyala + jalankan bot + lock.
-- `affiliate-links.txt` → export 45 link (backup; AFFILIATE_DB di script yg dipakai).
-- `posted.txt` / `last_comment.txt` → state runtime (gitignored, regenerate otomatis).
+### Step 4: Login Manual (Sekali Saja)
+Karena VPS headless (tanpa GUI), perlu VNC temporary buat login:
 
-## Catatan safety
-- 1 akun komentar berulang = risiko ToS/spam Threads. Jaga interval >= 20–30 mnt & variasi teks.
-- Multi-akun butuh profile Chrome terpisah + port beda (9223, 9224…) + proxy tiap akun.
+```bash
+bash login-manual.sh
+```
+
+**Cara login:**
+1. Download VNC Viewer: https://www.realvnc.com/download/viewer/
+2. Connect ke: `VPS_IP:5900`
+3. Login Threads manual di browser (4 akun)
+4. Setelah selesai, tekan CTRL+C di terminal VPS
+
+**Profile tersimpan otomatis di:** `~/chrome-profiles/`
+
+### Step 5: Test Jalankan Bot
+```bash
+bash run-bot.sh
+```
+
+### Step 6: Setup Cron (Otomatis Tiap 30 Menit)
+```bash
+crontab -e
+```
+
+Tambahkan baris:
+```
+*/30 * * * * /home/root/threads-affiliate-bot/run-bot.sh >> /tmp/threads-bot.log 2>&1
+```
+
+Cek log:
+```bash
+tail -f /tmp/threads-bot.log
+```
+
+## STRUKTUR FILE
+```
+threads-affiliate-bot/
+├── threads-bot.py        # Bot script utama
+├── requirements.txt      # Python dependencies
+├── setup-vps.sh         # Auto-setup VPS
+├── run-bot.sh           # Launcher headless (production)
+├── login-manual.sh      # VNC login helper (sekali pakai)
+└── README.md            # Guide ini
+```
+
+## TROUBLESHOOTING
+
+**Bot gak jalan?**
+- Cek Chrome jalan: `curl http://localhost:9222/json`
+- Cek log: `tail -f /tmp/threads-bot.log`
+
+**Profile hilang / minta login lagi?**
+- Ulangi Step 4 (login manual)
+- Pastikan folder `~/chrome-profiles/` ada
+
+**VNC gak connect?**
+- Cek firewall VPS: `sudo ufw allow 5900`
+- Cek IP VPS: `curl ifconfig.me`
+
+## CONFIGURATION
+
+Edit `threads-bot.py` kalau mau ubah:
+- `AFFILIATE_DB` - Ganti link affiliate
+- `MAX_AGE_DAYS` - Umur post max (default: 60 hari)
+- `DRY_RUN = True` - Test mode (gak beneran posting)
+
+## CREDITS
+Made with ❤️ for affiliate marketing automation.

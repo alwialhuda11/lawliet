@@ -1,11 +1,31 @@
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg-info/
+dist/
+build/
+
+# Chrome profiles (besar, gak perlu di-git)
+chrome-profiles/
+profiles/
+
+# Logs
 *.log
-run.lock
-posted.txt
-last_comment.txt
-bot.log
-*.log
-.env
-diag*.py
-check_post.py
+/tmp/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Batch files (Windows only, gak perlu di Linux)
+*.bat

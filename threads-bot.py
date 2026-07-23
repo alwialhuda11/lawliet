@@ -45,7 +45,7 @@ WEEK_DAYS = int(os.environ.get("WEEK_DAYS", "7"))
 
 DRY_RUN = False  # << LIVE: beneran kirim komen
 
-YOUR_USERNAME = "user529362927"  # << username Threads lu
+YOUR_USERNAME = os.environ.get("THREADS_USERNAME", "user529362927")  # << username Threads lu
 
 # Link affiliate asli (bisa full URL atau short code s.shopee.co.id/XXXX).
 AFFILIATE_DB = {
